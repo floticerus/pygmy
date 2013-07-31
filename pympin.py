@@ -1,11 +1,8 @@
 #!/usr/bin/env python
 
-import sys, os, mimetypes, re, glob, glib
-from gi.repository import Gtk
-import pango
-import pygst
-pygst.require( "0.10" )
-import gst
+import sys, os, mimetypes, re, glob, glib, hashlib, gi
+from gi.repository import Gtk, Gst, Pango
+gi.require_version( "Gst", "1.0" )
 
 class Pympin( Gtk.Window ):
     directories = [
@@ -132,8 +129,8 @@ class Pympin( Gtk.Window ):
         # define cell renderer
         cell_renderer = Gtk.CellRendererText()
 
-        # add ellipsis with pango if it can't fit
-        cell_renderer.props.ellipsize = pango.ELLIPSIZE_END
+        # add ellipsis with pango
+        cell_renderer.props.ellipsize = Pango.EllipsizeMode.END
 
         # artist list
         artists_scroll = Gtk.ScrolledWindow( hexpand = True, vexpand = True )
@@ -197,11 +194,17 @@ class Pympin( Gtk.Window ):
         browser.add( columns )
         browser.add( songs_scroll )
 
+    #def get_file_sha256( self, fnamelst ):
+    #    return [(fname, hashlib.sha256(open(fname, 'rb').read()).digest()) for fname in fnamelst]
+
     def add_song_to_store( self, root, filename ):
         # get tags, add to artist and album store if needed
+        full_path = os.path.join( root, filename )
+        file_tags = {}
+        
         self.song_store.append([
             "", # blank playing field
-            os.path.join( root, filename ), # full path
+            full_path, # full path
             "01", # track number
             filename, # song title
             "artist",
@@ -217,7 +220,7 @@ class Pympin( Gtk.Window ):
             for r,d,f in os.walk( directory ):
                 for filename in f:
                     mime = mimetypes.guess_type( filename )
-                    # make sure mime-type is not None, otherwise it will throw an error
+                    # make sure mime-type is not None, otherwise the match will throw an error on some files
                     if not mime[0] == None and re.match( "^audio", mime[0] ):
                         # it's an audio file, add it to the library even though we're not sure gstreamer can play it
                         self.add_song_to_store( r, filename )
