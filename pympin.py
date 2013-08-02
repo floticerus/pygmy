@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
-import sys, os, re, glob, gi, datetime
+import sys, os, re, gi
 gi.require_version( "Gst", "1.0" )
 from gi.repository import GObject, Gtk, Gst, Pango
-from gmusicapi import Mobileclient
+from gmusicapi import Webclient
 #from mutagen.mp3 import MP3
 #from mutagen.easyid3 import EasyID3
 
@@ -14,8 +14,6 @@ class Pympin( Gtk.Window ):
     #]
 
     artist_dictionary = {}
-
-    authenticated = False
 
     def __init__( self ):
         Gtk.Window.__init__( self, title = "pympin" )
@@ -32,7 +30,18 @@ class Pympin( Gtk.Window ):
         # initialize gstreamer
         Gst.init( None )
 
-        self.api = Mobileclient()
+        self.api = Webclient()
+
+        #self.pipeline = Gst.Pipeline()
+
+        self.player = Gst.ElementFactory.make( "playbin", None )
+        self.fakesink = Gst.ElementFactory.make( "fakesink", None )
+        self.player.set_property( "video-sink", self.fakesink )
+
+        self.bus = self.player.get_bus()
+        self.bus.connect("message", self.on_message)
+
+        #self.pipeline.add( self.player )
 
         self.playing = False
 
@@ -43,30 +52,21 @@ class Pympin( Gtk.Window ):
         # full file path, track #, title, artist, album, year, time
         self.song_store = Gtk.ListStore( str, str, int, str, str, str, str, str )
 
-        self.album_store.append(["test"])
-        self.album_store.append(["test2"])
-        self.album_store.append(["test3"])
-        self.album_store.append(["test4"])
-        self.album_store.append(["test5"])
-        self.album_store.append(["test6"])
-        self.album_store.append(["test7"])
-        self.album_store.append(["test8"])
-        self.album_store.append(["test9"])
-        self.album_store.append(["test10"])
-        self.album_store.append(["test11"])
-        self.album_store.append(["test12"])
-        self.album_store.append(["test13"])
-        self.album_store.append(["test14"])
-        self.album_store.append(["test15"])
-        self.album_store.append(["test16"])
-        self.album_store.append(["test17"])
-        self.album_store.append(["test18"])
-        self.album_store.append(["test19"])
-        self.album_store.append(["test20"])
-        self.album_store.append(["test21"])
-        self.album_store.append(["test22"])
+        # self.album_store.append(["test"])
 
         self.build_login()
+
+    def on_message( self, bus, message ):
+        t = message.type
+        print(message)
+        if t == Gst.Message.EOS:
+            self.player.set_state(Gst.State.NULL)
+            self.playing = False
+        elif t == Gst.Message.ERROR:
+            self.player.set_state(Gst.State.NULL)
+            err, debug = message.parse_error()
+            print "Error: %s" % err, debug
+            self.playing = False
 
     def build_login( self ):
         self.login_box = Gtk.Grid()
@@ -95,7 +95,6 @@ class Pympin( Gtk.Window ):
 
     def do_login( self, widget ):
         if self.api.login( self.entry_username.get_text(), self.entry_password.get_text() ):
-            self.authenticated = True
             self.login_box.destroy()
             self.build_ui()
         else:
@@ -182,6 +181,9 @@ class Pympin( Gtk.Window ):
         # song list
         songs_scroll = Gtk.ScrolledWindow( hexpand = True, vexpand = True )
         self.songs = Gtk.TreeView( self.song_store )
+
+        self.songs.connect( "row-activated", self.on_song_activate )
+
         songs_columns = {
             "playing": Gtk.TreeViewColumn( "", cell_renderer, text = 0 ),
             "track": Gtk.TreeViewColumn( "#", cell_renderer, text = 2 ),
@@ -198,18 +200,18 @@ class Pympin( Gtk.Window ):
                 songs_columns[column].set_resizable( True )
 
         # set title, artist, and album to expand
-        songs_columns["title"].set_expand( True )
-        songs_columns["artist"].set_expand( True )
-        songs_columns["album"].set_expand( True )
+        songs_columns[ "title" ].set_expand( True )
+        songs_columns[ "artist" ].set_expand( True )
+        songs_columns[ "album" ].set_expand( True )
 
         # make sure we add them in the proper order
-        self.songs.append_column( songs_columns["playing"] )
-        self.songs.append_column( songs_columns["track"] )
-        self.songs.append_column( songs_columns["title"] )
-        self.songs.append_column( songs_columns["artist"] )
-        self.songs.append_column( songs_columns["album"] )
-        self.songs.append_column( songs_columns["year"] )
-        self.songs.append_column( songs_columns["time"] )
+        self.songs.append_column( songs_columns[ "playing" ] )
+        self.songs.append_column( songs_columns[ "track" ] )
+        self.songs.append_column( songs_columns[ "title" ] )
+        self.songs.append_column( songs_columns[ "artist" ] )
+        self.songs.append_column( songs_columns[ "album" ] )
+        self.songs.append_column( songs_columns[ "year" ] )
+        self.songs.append_column( songs_columns[ "time" ] )
 
         songs_scroll.add( self.songs )
         self.songs.get_selection().set_mode( Gtk.SelectionMode.MULTIPLE )
@@ -219,6 +221,14 @@ class Pympin( Gtk.Window ):
         browser.add( songs_scroll )
 
         self.find_songs()
+
+    def on_song_activate( self, widget, path, col ):
+        # set the player state to null
+        self.player.set_state( Gst.State.NULL )
+        # set the player uri to the activated song url
+        self.player.set_property( "uri", self.api.get_stream_urls( self.song_store[ path ][ 1 ] )[ 0 ] )
+        # set the player state to playing
+        self.player.set_state( Gst.State.PLAYING )
 
     def add_artist_to_store( self, artist ):
         if not artist in self.artist_dictionary:
@@ -253,7 +263,7 @@ class Pympin( Gtk.Window ):
         self.song_store.append([
             "",
             track["id"],
-            track["trackNumber"],
+            track["track"],
             track["title"],
             this_artist,
             track["album"],
@@ -279,7 +289,7 @@ class Pympin( Gtk.Window ):
         #])
 
     def find_songs( self ):
-        if not self.authenticated == True:
+        if not self.api.is_authenticated() == True:
             return
 
         self.library = self.api.get_all_songs()
@@ -303,6 +313,21 @@ class Pympin( Gtk.Window ):
         self.artist_store.append([ artists_all ])
 
         self.show_all()
+
+        # play first song as a test
+        # self.player.set_property( "uri", self.api.get_stream_urls( self.song_store[0][1] )[0] )
+
+        #sink = Gst.ElementFactory.make( "fakesink", None )
+        #player.set_property( "video-sink", sink )
+        #self.pipeline.add( sink )
+
+        #client = Gst.ElementFactory.make( "tcpclientsink", None )
+        #self.pipeline.add( client )
+        # print(self.api.get_stream_urls( self.song_store[0][1] ))
+        #client.set_property( "host", self.api.get_stream_urls( self.song_store[0][1] ) )
+        #client.set_property( "port", 80 )
+
+        #src.link( client )
 
             #print(track)
 
