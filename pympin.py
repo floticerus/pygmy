@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys, os, re, gi
+import sys, os, re, glib, gi, time
 gi.require_version( "Gst", "1.0" )
 from gi.repository import GObject, Gtk, Gst, Pango
 from gmusicapi import Webclient
@@ -30,16 +30,16 @@ class Pympin( Gtk.Window ):
         # initialize gstreamer
         Gst.init( None )
 
+        # need to switch from webclient eventually, because it's being deprecated
+        # i don't think mobileclient works because of the android id thing
         self.api = Webclient()
 
         #self.pipeline = Gst.Pipeline()
 
         self.player = Gst.ElementFactory.make( "playbin", None )
-        self.fakesink = Gst.ElementFactory.make( "fakesink", None )
-        self.player.set_property( "video-sink", self.fakesink )
 
-        self.bus = self.player.get_bus()
-        self.bus.connect("message", self.on_message)
+        #self.bus = self.player.get_bus()
+        #self.bus.connect("message", self.on_message)
 
         #self.pipeline.add( self.player )
 
@@ -65,7 +65,7 @@ class Pympin( Gtk.Window ):
         elif t == Gst.Message.ERROR:
             self.player.set_state(Gst.State.NULL)
             err, debug = message.parse_error()
-            print "Error: %s" % err, debug
+            #print "Error: %s" % err, debug
             self.playing = False
 
     def build_login( self ):
@@ -105,45 +105,49 @@ class Pympin( Gtk.Window ):
         self.add( grid )
 
         # toolbar stuff
-        fixed = Gtk.Fixed()
+        #fixed = Gtk.Fixed()
+        # fixed.set_size_request( -1, 38 )
+        toolbar_parent = Gtk.VBox()
+
         toolbar = Gtk.HBox()
-        fixed.add( toolbar )
+        toolbar_parent.pack_start( toolbar, True, True, 3 )
+        #fixed.add( toolbar )
 
         # previous button
         self.button_previous = Gtk.Button( "" )
         self.button_previous.set_image( self.get_image( Gtk.STOCK_MEDIA_PREVIOUS ) )
         #self.button_previous.connect("clicked", self.on_button_previous_clicked)
-        toolbar.pack_start( self.button_previous, True, True, 2 )
+        toolbar.pack_start( self.button_previous, False, False, 1 )
 
         # play/pause button
         self.button_play = Gtk.Button( "" )
         self.button_play.set_image( self.get_image( Gtk.STOCK_MEDIA_PLAY ) )
         self.button_play.connect( "clicked", self.play_pause )
-        toolbar.pack_start( self.button_play, True, True, 2 )
+        toolbar.pack_start( self.button_play, False, False, 1 )
 
         # stop button
         self.button_stop = Gtk.Button( "" )
         self.button_stop.set_sensitive( False )
         self.button_stop.set_image( self.get_image( Gtk.STOCK_MEDIA_STOP ) )
         self.button_stop.connect( "clicked", self.do_stop )
-        toolbar.pack_start( self.button_stop, True, True, 2 )
+        toolbar.pack_start( self.button_stop, False, False, 1 )
 
         # next button
         self.button_next = Gtk.Button( "" )
         self.button_next.set_image( self.get_image( Gtk.STOCK_MEDIA_NEXT ) )
         #self.button_next.connect("clicked", self.on_button_play_clicked)
-        toolbar.pack_start( self.button_next, True, True, 2 )
+        toolbar.pack_start( self.button_next, False, False, 1 )
 
         #box.pack_start(fixed, True, True, 0)
 
         # add the fixed button bar to the grid
-        grid.add( fixed )
+        grid.add( toolbar_parent )
 
         # browser stuff
         browser = Gtk.VPaned()
         #browser_paned = Gtk.VPaned()
         #browser.add(browser_paned)
-        grid.attach_next_to( browser, fixed, Gtk.PositionType.BOTTOM, 1, 1 )
+        grid.attach_next_to( browser, toolbar_parent, Gtk.PositionType.BOTTOM, 1, 1 )
 
         # create columns for artist/album filters
         columns = Gtk.HBox()
@@ -201,8 +205,8 @@ class Pympin( Gtk.Window ):
 
         # set title, artist, and album to expand
         songs_columns[ "title" ].set_expand( True )
-        songs_columns[ "artist" ].set_expand( True )
-        songs_columns[ "album" ].set_expand( True )
+        #songs_columns[ "artist" ].set_expand( True )
+        #songs_columns[ "album" ].set_expand( True )
 
         # make sure we add them in the proper order
         self.songs.append_column( songs_columns[ "playing" ] )
@@ -240,25 +244,8 @@ class Pympin( Gtk.Window ):
 
         self.add_artist_to_store( this_artist )
 
-        # get track length in milliseconds
-        this_millis = int( track[ "durationMillis" ] ) / 1000
-
-        time_minutes = 0
-        time_seconds = "00"
-
-        # convert milliseconds to readable format
-        while this_millis > 0:
-            if this_millis >= 60:
-                time_minutes += 1
-                this_millis -= 60
-            else:
-                time_seconds = str( this_millis )
-                time_seconds += "0" if len( time_seconds ) < 2 else ""
-                this_millis = 0
-
-        time_string = str( time_minutes )
-        time_string += ":"
-        time_string += str( time_seconds )
+        # format the time to minutes:seconds and remove the leading 0
+        time_string = re.sub( "^0", "", time.strftime( "%M:%S", time.gmtime( int( track[ "durationMillis" ] ) / 1000 ) ) )
 
         self.song_store.append([
             "",
