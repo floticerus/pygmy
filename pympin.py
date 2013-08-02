@@ -1,21 +1,38 @@
 #!/usr/bin/env python
 
-import sys, os, mimetypes, re, glob, glib, hashlib, gi
-from gi.repository import Gtk, Gst, Pango
+import sys, os, re, glob, gi, datetime
 gi.require_version( "Gst", "1.0" )
+from gi.repository import GObject, Gtk, Gst, Pango
+from gmusicapi import Mobileclient
+#from mutagen.mp3 import MP3
+#from mutagen.easyid3 import EasyID3
 
 class Pympin( Gtk.Window ):
-    directories = [
-        "/home/kevin/player/songs",
-        "/mnt/stuff/tunez"
-    ]
+    #directories = [
+        #"/home/kevin/player/songs"# ,
+        # "/mnt/stuff/tunez"
+    #]
+
+    artist_dictionary = {}
+
+    authenticated = False
 
     def __init__( self ):
         Gtk.Window.__init__( self, title = "pympin" )
 
-        glib.threads_init()
-
+        # set default window size
         self.set_default_size( 800, 400 )
+
+        # initialize gobject threads
+        GObject.threads_init()
+
+        # initialize glib threads
+        # glib.threads_init()
+
+        # initialize gstreamer
+        Gst.init( None )
+
+        self.api = Mobileclient()
 
         self.playing = False
 
@@ -24,31 +41,7 @@ class Pympin( Gtk.Window ):
         self.album_store = Gtk.ListStore( str )
 
         # full file path, track #, title, artist, album, year, time
-        self.song_store = Gtk.ListStore( str, str, str, str, str, str, str, str )
-
-        # full the stores with temporary data
-        self.artist_store.append([ "test" ])
-        self.artist_store.append(["test2"])
-        self.artist_store.append(["test3"])
-        self.artist_store.append(["test4"])
-        self.artist_store.append(["test5"])
-        self.artist_store.append(["test6"])
-        self.artist_store.append(["test7"])
-        self.artist_store.append(["test8"])
-        self.artist_store.append(["test9"])
-        self.artist_store.append(["test10"])
-        self.artist_store.append(["test11"])
-        self.artist_store.append(["test12"])
-        self.artist_store.append(["test13"])
-        self.artist_store.append(["test14"])
-        self.artist_store.append(["test15"])
-        self.artist_store.append(["test16"])
-        self.artist_store.append(["test17"])
-        self.artist_store.append(["test18"])
-        self.artist_store.append(["test19"])
-        self.artist_store.append(["test20"])
-        self.artist_store.append(["test21"])
-        self.artist_store.append(["test22"])
+        self.song_store = Gtk.ListStore( str, str, int, str, str, str, str, str )
 
         self.album_store.append(["test"])
         self.album_store.append(["test2"])
@@ -73,9 +66,40 @@ class Pympin( Gtk.Window ):
         self.album_store.append(["test21"])
         self.album_store.append(["test22"])
 
-        self.build_ui()
+        self.build_login()
 
-        glib.idle_add( self.find_songs )
+    def build_login( self ):
+        self.login_box = Gtk.Grid()
+
+        self.login_box.set_halign( Gtk.Align.CENTER )
+        self.login_box.set_valign( Gtk.Align.CENTER )
+
+        login_label = Gtk.Label( label = "Login to Google Play" )
+
+        self.entry_username = Gtk.Entry()
+        self.entry_username.set_placeholder_text( "Email" )
+
+        self.entry_password = Gtk.Entry()
+        self.entry_password.set_visibility( False )
+        self.entry_password.set_placeholder_text( "Password" )
+
+        login_button = Gtk.Button( label = "Login" )
+        login_button.connect( "clicked", self.do_login )
+
+        self.login_box.add( login_label )
+        self.login_box.attach_next_to( self.entry_username, login_label, Gtk.PositionType.BOTTOM, 1, 1 )
+        self.login_box.attach_next_to( self.entry_password, self.entry_username, Gtk.PositionType.BOTTOM, 1, 1 )
+        self.login_box.attach_next_to( login_button, self.entry_password, Gtk.PositionType.BOTTOM, 1, 1 )
+
+        self.add( self.login_box )
+
+    def do_login( self, widget ):
+        if self.api.login( self.entry_username.get_text(), self.entry_password.get_text() ):
+            self.authenticated = True
+            self.login_box.destroy()
+            self.build_ui()
+        else:
+            print( "Authentication with Google failed" )
 
     def build_ui( self ):
         grid = Gtk.Grid()
@@ -194,36 +218,113 @@ class Pympin( Gtk.Window ):
         browser.add( columns )
         browser.add( songs_scroll )
 
-    #def get_file_sha256( self, fnamelst ):
-    #    return [(fname, hashlib.sha256(open(fname, 'rb').read()).digest()) for fname in fnamelst]
+        self.find_songs()
 
-    def add_song_to_store( self, root, filename ):
-        # get tags, add to artist and album store if needed
-        full_path = os.path.join( root, filename )
-        file_tags = {}
-        
+    def add_artist_to_store( self, artist ):
+        if not artist in self.artist_dictionary:
+            self.artist_dictionary[ artist ] = 0
+        self.artist_dictionary[ artist ] += 1
+
+    def add_song_to_store( self, track ):
+        this_artist = track[ "artist" ]
+
+        self.add_artist_to_store( this_artist )
+
+        # get track length in milliseconds
+        this_millis = int( track[ "durationMillis" ] ) / 1000
+
+        time_minutes = 0
+        time_seconds = "00"
+
+        # convert milliseconds to readable format
+        while this_millis > 0:
+            if this_millis >= 60:
+                time_minutes += 1
+                this_millis -= 60
+            else:
+                time_seconds = str( this_millis )
+                time_seconds += "0" if len( time_seconds ) < 2 else ""
+                this_millis = 0
+
+        time_string = str( time_minutes )
+        time_string += ":"
+        time_string += str( time_seconds )
+
         self.song_store.append([
-            "", # blank playing field
-            full_path, # full path
-            "01", # track number
-            filename, # song title
-            "artist",
-            "album",
-            "year",
-            "3:42"
+            "",
+            track["id"],
+            track["trackNumber"],
+            track["title"],
+            this_artist,
+            track["album"],
+            str( track[ "year" ] if not track[ "year" ] == 0 else "" ),
+            str( time_string )
         ])
 
+        # get tags, add to artist and album store if needed
+        #full_path = os.path.join( root, filename )
+        #file_tags = {}
+
+        # audio = EasyID3( full_path )
+
+        #self.song_store.append([
+            #"", # blank playing field
+            #full_path, # full path
+            #audio[ "tracknumber" ][0], # track number
+            #audio[ "title" ][0], # song title
+            #audio[ "artist" ][0],
+            #audio[ "album" ][0],
+            #audio[ "date" ][0],
+            #"3:42"
+        #])
+
     def find_songs( self ):
+        if not self.authenticated == True:
+            return
+
+        self.library = self.api.get_all_songs()
+
+        for track in self.library:
+            self.add_song_to_store( track )
+
+        for artist in self.artist_dictionary:
+            to_add = artist
+            to_add += " ("
+            to_add += str( self.artist_dictionary[ artist ] )
+            to_add += ")"
+            self.artist_store.append([ to_add ])
+
+        artists_all = "All "
+        artists_all += str( len( self.artist_dictionary ) )
+        artists_all += " artists ("
+        artists_all += str( len( self.song_store ) )
+        artists_all += ")"
+
+        self.artist_store.append([ artists_all ])
+
+        self.show_all()
+
+            #print(track)
+
+        #self.library = self.api.get_all_songs()
+        #print(self.library)
+
+
+
         # parse through every directory listed in the library
-        for directory in self.directories:
+        #for directory in self.directories:
             # parse through all sub-folders looking for audio audio files
-            for r,d,f in os.walk( directory ):
-                for filename in f:
-                    mime = mimetypes.guess_type( filename )
+            #for r,d,f in os.walk( directory ):
+                #for filename in f:
+                    # mime = mimetypes.guess_type( filename )
+                    #mime = magic.from_file( os.path.join( r, filename ), mime = True )
+                    #print(mime)
                     # make sure mime-type is not None, otherwise the match will throw an error on some files
-                    if not mime[0] == None and re.match( "^audio", mime[0] ):
-                        # it's an audio file, add it to the library even though we're not sure gstreamer can play it
-                        self.add_song_to_store( r, filename )
+                    #if not mime == None:
+                        #match = re.match( "^audio", mime )
+                        #if match:
+                            # it's an audio file, add it to the library even though we're not sure gstreamer can play it
+                            #self.add_song_to_store( r, filename )
 
     def get_image( self, icon ):
         image = Gtk.Image()
