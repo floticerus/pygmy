@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys
+#import sys
 from cx_Freeze import setup, Executable
 
 # Dependencies are automatically detected, but it might need
@@ -18,7 +18,7 @@ buildOptions = dict(
 )
 
 executables = [
-    Executable('pympin.py')
+    Executable("pympin.py" )
 ]
 
 setup(

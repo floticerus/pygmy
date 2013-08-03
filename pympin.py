@@ -34,14 +34,10 @@ class Pympin( Gtk.Window ):
         # i don't think mobileclient works because of the android id thing
         self.api = Webclient()
 
-        #self.pipeline = Gst.Pipeline()
-
         self.player = Gst.ElementFactory.make( "playbin", None )
 
         #self.bus = self.player.get_bus()
         #self.bus.connect("message", self.on_message)
-
-        #self.pipeline.add( self.player )
 
         self.playing = False
 
@@ -51,6 +47,8 @@ class Pympin( Gtk.Window ):
 
         # full file path, track #, title, artist, album, year, time
         self.song_store = Gtk.ListStore( str, str, int, str, str, str, str, str )
+
+        self.song_sorted = Gtk.TreeModelSort( model = self.song_store )
 
         # self.album_store.append(["test"])
 
@@ -77,7 +75,7 @@ class Pympin( Gtk.Window ):
         login_label = Gtk.Label( label = "Login to Google Play" )
 
         self.entry_username = Gtk.Entry()
-        self.entry_username.set_placeholder_text( "Email" )
+        self.entry_username.set_placeholder_text( "User" )
 
         self.entry_password = Gtk.Entry()
         self.entry_password.set_visibility( False )
@@ -114,27 +112,27 @@ class Pympin( Gtk.Window ):
         #fixed.add( toolbar )
 
         # previous button
-        self.button_previous = Gtk.Button( "" )
-        self.button_previous.set_image( self.get_image( Gtk.STOCK_MEDIA_PREVIOUS ) )
+        self.button_previous = Gtk.Button()
+        self.button_previous.set_image( self.get_image( icon = Gtk.STOCK_MEDIA_PREVIOUS ) )
         #self.button_previous.connect("clicked", self.on_button_previous_clicked)
         toolbar.pack_start( self.button_previous, False, False, 1 )
 
         # play/pause button
-        self.button_play = Gtk.Button( "" )
-        self.button_play.set_image( self.get_image( Gtk.STOCK_MEDIA_PLAY ) )
+        self.button_play = Gtk.Button()
+        self.button_play.set_image( self.get_image( icon = Gtk.STOCK_MEDIA_PLAY ) )
         self.button_play.connect( "clicked", self.play_pause )
         toolbar.pack_start( self.button_play, False, False, 1 )
 
         # stop button
-        self.button_stop = Gtk.Button( "" )
+        self.button_stop = Gtk.Button()
         self.button_stop.set_sensitive( False )
-        self.button_stop.set_image( self.get_image( Gtk.STOCK_MEDIA_STOP ) )
+        self.button_stop.set_image( self.get_image( icon = Gtk.STOCK_MEDIA_STOP ) )
         self.button_stop.connect( "clicked", self.do_stop )
         toolbar.pack_start( self.button_stop, False, False, 1 )
 
         # next button
-        self.button_next = Gtk.Button( "" )
-        self.button_next.set_image( self.get_image( Gtk.STOCK_MEDIA_NEXT ) )
+        self.button_next = Gtk.Button()
+        self.button_next.set_image( self.get_image( icon = Gtk.STOCK_MEDIA_NEXT ) )
         #self.button_next.connect("clicked", self.on_button_play_clicked)
         toolbar.pack_start( self.button_next, False, False, 1 )
 
@@ -184,7 +182,7 @@ class Pympin( Gtk.Window ):
 
         # song list
         songs_scroll = Gtk.ScrolledWindow( hexpand = True, vexpand = True )
-        self.songs = Gtk.TreeView( self.song_store )
+        self.songs = Gtk.TreeView( self.song_sorted )
 
         self.songs.connect( "row-activated", self.on_song_activate )
 
@@ -204,7 +202,7 @@ class Pympin( Gtk.Window ):
                 songs_columns[column].set_resizable( True )
 
         # set title, artist, and album to expand
-        songs_columns[ "title" ].set_expand( True )
+        #songs_columns[ "title" ].set_expand( True )
         #songs_columns[ "artist" ].set_expand( True )
         #songs_columns[ "album" ].set_expand( True )
 
@@ -237,6 +235,7 @@ class Pympin( Gtk.Window ):
     def add_artist_to_store( self, artist ):
         if not artist in self.artist_dictionary:
             self.artist_dictionary[ artist ] = 0
+            
         self.artist_dictionary[ artist ] += 1
 
     def add_song_to_store( self, track ):
@@ -245,7 +244,10 @@ class Pympin( Gtk.Window ):
         self.add_artist_to_store( this_artist )
 
         # format the time to minutes:seconds and remove the leading 0
-        time_string = re.sub( "^0", "", time.strftime( "%M:%S", time.gmtime( int( track[ "durationMillis" ] ) / 1000 ) ) )
+        time_string = re.sub(
+            "^0", "",
+            time.strftime( "%M:%S", time.gmtime( int( track[ "durationMillis" ] ) / 1000 ) )
+        )
 
         self.song_store.append([
             "",
@@ -258,23 +260,6 @@ class Pympin( Gtk.Window ):
             str( time_string )
         ])
 
-        # get tags, add to artist and album store if needed
-        #full_path = os.path.join( root, filename )
-        #file_tags = {}
-
-        # audio = EasyID3( full_path )
-
-        #self.song_store.append([
-            #"", # blank playing field
-            #full_path, # full path
-            #audio[ "tracknumber" ][0], # track number
-            #audio[ "title" ][0], # song title
-            #audio[ "artist" ][0],
-            #audio[ "album" ][0],
-            #audio[ "date" ][0],
-            #"3:42"
-        #])
-
     def find_songs( self ):
         if not self.api.is_authenticated() == True:
             return
@@ -285,43 +270,15 @@ class Pympin( Gtk.Window ):
             self.add_song_to_store( track )
 
         for artist in self.artist_dictionary:
-            to_add = artist
-            to_add += " ("
-            to_add += str( self.artist_dictionary[ artist ] )
-            to_add += ")"
-            self.artist_store.append([ to_add ])
+            self.artist_store.append([
+                artist + " (" + str( self.artist_dictionary[ artist ] ) + ")"
+            ])
 
-        artists_all = "All "
-        artists_all += str( len( self.artist_dictionary ) )
-        artists_all += " artists ("
-        artists_all += str( len( self.song_store ) )
-        artists_all += ")"
-
-        self.artist_store.append([ artists_all ])
+        self.artist_store.append([
+            "All " + str( len( self.artist_dictionary ) ) + " artists (" + str( len( self.song_store ) ) + ")"
+        ])
 
         self.show_all()
-
-        # play first song as a test
-        # self.player.set_property( "uri", self.api.get_stream_urls( self.song_store[0][1] )[0] )
-
-        #sink = Gst.ElementFactory.make( "fakesink", None )
-        #player.set_property( "video-sink", sink )
-        #self.pipeline.add( sink )
-
-        #client = Gst.ElementFactory.make( "tcpclientsink", None )
-        #self.pipeline.add( client )
-        # print(self.api.get_stream_urls( self.song_store[0][1] ))
-        #client.set_property( "host", self.api.get_stream_urls( self.song_store[0][1] ) )
-        #client.set_property( "port", 80 )
-
-        #src.link( client )
-
-            #print(track)
-
-        #self.library = self.api.get_all_songs()
-        #print(self.library)
-
-
 
         # parse through every directory listed in the library
         #for directory in self.directories:
