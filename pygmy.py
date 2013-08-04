@@ -92,6 +92,7 @@ class Pygmy( Gtk.Window ):
         self.add( self.login_box )
 
     def do_login( self, widget ):
+        # add a loading bar up here
         if self.api.login( self.entry_username.get_text(), self.entry_password.get_text() ):
             self.login_box.destroy()
             self.build_ui()
