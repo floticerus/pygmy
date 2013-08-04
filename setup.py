@@ -14,7 +14,11 @@ buildOptions = dict(
 	include_files = [
 		"cacert.pem"
 	],
-	excludes = []
+	excludes = [
+		"tcl",
+		"tkk",
+		"_osx_support"
+	]
 )
 
 executables = [
