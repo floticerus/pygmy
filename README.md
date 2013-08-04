@@ -9,6 +9,8 @@ installation
 ======
 right now this will only run on linux. there are two ways to run the program
 
+note that on some linux distros, `python` references python3, so you will need to type `python2` instead
+
 ------
 
 there are no pre-built packages as of yet, so you'll need to build it with cxfreeze yourself
