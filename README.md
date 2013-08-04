@@ -1,4 +1,4 @@
-pympin
+pygmy
 ======
 
 a google play music library written in python and gtk3

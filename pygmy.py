@@ -7,7 +7,7 @@ from gmusicapi import Webclient
 #from mutagen.mp3 import MP3
 #from mutagen.easyid3 import EasyID3
 
-class Pympin( Gtk.Window ):
+class Pygmy( Gtk.Window ):
     #directories = [
         #"/home/kevin/player/songs"# ,
         # "/mnt/stuff/tunez"
@@ -16,7 +16,7 @@ class Pympin( Gtk.Window ):
     artist_dictionary = {}
 
     def __init__( self ):
-        Gtk.Window.__init__( self, title = "pympin" )
+        Gtk.Window.__init__( self, title = "pygmy" )
 
         # set default window size
         self.set_default_size( 800, 400 )
@@ -320,7 +320,7 @@ class Pympin( Gtk.Window ):
         self.playing = False
         self.button_stop.set_sensitive( False )
 
-pympin = Pympin()
-pympin.connect( "delete-event", Gtk.main_quit )
-pympin.show_all()
+pygmy = Pygmy()
+pygmy.connect( "delete-event", Gtk.main_quit )
+pygmy.show_all()
 Gtk.main()

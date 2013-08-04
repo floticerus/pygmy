@@ -22,11 +22,11 @@ buildOptions = dict(
 )
 
 executables = [
-    Executable("pympin.py" )
+    Executable("pygmy.py" )
 ]
 
 setup(
-	name='pympin',
+	name='pygmy',
     version = '0.1',
     description = 'a google play music library utilizing gtk3, and gstreamer1.0',
     options = dict( build_exe = buildOptions ),
