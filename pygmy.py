@@ -2,7 +2,7 @@
 
 import sys, os, re, glib, gi, time
 gi.require_version( "Gst", "1.0" )
-from gi.repository import GObject, Gtk, Gst, Pango
+from gi.repository import GObject, Gdk, Gtk, Gst, Pango
 from gmusicapi import Webclient
 #from mutagen.mp3 import MP3
 #from mutagen.easyid3 import EasyID3
@@ -43,7 +43,11 @@ class Pygmy( Gtk.Window ):
 
         self.artist_store = Gtk.ListStore( str )
 
+        self.artist_sorted = Gtk.TreeModelSort( model = self.artist_store )
+
         self.album_store = Gtk.ListStore( str )
+
+        self.album_sorted = Gtk.TreeModelSort( model = self.album_store )
 
         # full file path, track #, title, artist, album, year, time
         self.song_store = Gtk.ListStore( str, str, int, str, str, str, str, str )
@@ -160,47 +164,90 @@ class Pygmy( Gtk.Window ):
 
         # artist list
         artists_scroll = Gtk.ScrolledWindow( hexpand = True, vexpand = True )
-        self.artists = Gtk.TreeView( self.artist_store )
+        self.artists = Gtk.TreeView( self.artist_sorted )
         artist_column = Gtk.TreeViewColumn( "Artist", cell_renderer, text = 0 )
         self.artists.append_column( artist_column )
-        artists_scroll.add( self.artists )
-        # allow multiple selected items
         self.artists.get_selection().set_mode( Gtk.SelectionMode.MULTIPLE )
+        self.artist_sorted.set_sort_column_id( 0, Gtk.SortType.ASCENDING )
+        artists_scroll.add( self.artists )
 
         #album list
         albums_scroll = Gtk.ScrolledWindow( hexpand = True, vexpand = True )
-        self.albums = Gtk.TreeView( self.album_store )
+        self.albums = Gtk.TreeView( self.album_sorted )
         album_column = Gtk.TreeViewColumn( "Album", cell_renderer, text = 0 )
         self.albums.append_column( album_column )
-        albums_scroll.add( self.albums )
-        # allow multiple selected items
         self.albums.get_selection().set_mode( Gtk.SelectionMode.MULTIPLE )
+        self.album_sorted.set_sort_column_id( 0, Gtk.SortType.ASCENDING )
+        albums_scroll.add( self.albums )
 
         # add items to the columns
-        columns.pack_start( artists_scroll, True, True, 0 )
-        columns.pack_start( albums_scroll, True, True, 0 )
+        columns.pack_start( artists_scroll, False, True, 0 )
+        columns.pack_start( albums_scroll, False, True, 0 )
         #columns.add(self.artists)
 
         # song list
         songs_scroll = Gtk.ScrolledWindow( hexpand = True, vexpand = True )
         self.songs = Gtk.TreeView( self.song_sorted )
 
+        self.songs.get_selection().set_mode( Gtk.SelectionMode.MULTIPLE )
+
         self.songs.connect( "row-activated", self.on_song_activate )
 
         songs_columns = {
-            "playing": Gtk.TreeViewColumn( "", cell_renderer, text = 0 ),
-            "track": Gtk.TreeViewColumn( "#", cell_renderer, text = 2 ),
-            "title": Gtk.TreeViewColumn( "Title", cell_renderer, text = 3 ),
-            "artist": Gtk.TreeViewColumn( "Artist", cell_renderer, text = 4 ),
-            "album": Gtk.TreeViewColumn( "Album", cell_renderer, text = 5 ),
-            "year": Gtk.TreeViewColumn( "Year", cell_renderer, text = 6 ),
-            "time": Gtk.TreeViewColumn( "Time", cell_renderer, text = 7 )
+            "playing": Gtk.TreeViewColumn(
+                title = "",
+                cell_renderer = cell_renderer,
+                text = 0
+            ),
+            "track": Gtk.TreeViewColumn(
+                title = "#",
+                cell_renderer = cell_renderer,
+                text = 2
+            ),
+            "title": Gtk.TreeViewColumn(
+                title = "Title",
+                cell_renderer = cell_renderer,
+                text = 3
+            ),
+            "artist": Gtk.TreeViewColumn(
+                title = "Artist",
+                cell_renderer = cell_renderer,
+                text = 4
+            ),
+            "album": Gtk.TreeViewColumn(
+                title = "Album",
+                cell_renderer = cell_renderer,
+                text = 5
+            ),
+            "year": Gtk.TreeViewColumn(
+                title = "Year",
+                cell_renderer = cell_renderer,
+                text = 6
+            ),
+            "time": Gtk.TreeViewColumn(
+                title = "Time",
+                cell_renderer = cell_renderer,
+                text = 7
+            )
         }
 
         # set all columns except playing as resizable
         for column in songs_columns:
             if column != "playing":
+                songs_columns[column].set_sizing( Gtk.TreeViewColumnSizing.AUTOSIZE )
                 songs_columns[column].set_resizable( True )
+                songs_columns[column].set_reorderable( True )
+
+        # songs_columns[ "track" ].set_sort_column_id( 2 )
+        songs_columns[ "title" ].set_sort_column_id( 3 )
+        songs_columns[ "artist" ].set_sort_column_id( 4 )
+        songs_columns[ "album" ].set_sort_column_id( 5 )
+        songs_columns[ "year" ].set_sort_column_id( 6 )
+        songs_columns[ "time" ].set_sort_column_id( 7 )
+
+        self.song_sorted.set_sort_column_id( 4, Gtk.SortType.ASCENDING )
+
+        # self.song_sorted.set_sort_func( 2, self.compare, None )
 
         # set title, artist, and album to expand
         #songs_columns[ "title" ].set_expand( True )
@@ -217,7 +264,6 @@ class Pygmy( Gtk.Window ):
         self.songs.append_column( songs_columns[ "time" ] )
 
         songs_scroll.add( self.songs )
-        self.songs.get_selection().set_mode( Gtk.SelectionMode.MULTIPLE )
 
         # put together the browser window
         browser.add( columns )
@@ -225,10 +271,23 @@ class Pygmy( Gtk.Window ):
 
         self.find_songs()
 
+    # demo comparison for sorting treemodelsorted
+    def compare( self, model, row1, row2, user_data ):
+        sort_column, _ = model.get_sort_column_id()
+        value1 = model.get_value(row1, sort_column)
+        value2 = model.get_value(row2, sort_column)
+        if value1 < value2:
+            return -1
+        elif value1 == value2:
+            return 0
+        else:
+            return 1
+
     def on_song_activate( self, widget, path, col ):
         # set the player state to null
         self.player.set_state( Gst.State.NULL )
         # set the player uri to the activated song url
+        # HEYYYYYY
         self.player.set_property( "uri", self.api.get_stream_urls( self.song_store[ path ][ 1 ] )[ 0 ] )
         # set the player state to playing
         self.player.set_state( Gst.State.PLAYING )
@@ -240,23 +299,23 @@ class Pygmy( Gtk.Window ):
         self.artist_dictionary[ artist ] += 1
 
     def add_song_to_store( self, track ):
-        this_artist = track[ "artist" ]
+        this_artist = track[ "artist" ] if not track[ "artist" ] == "" else "Unknown"
 
         self.add_artist_to_store( this_artist )
 
         # format the time to minutes:seconds and remove the leading 0
         time_string = re.sub(
             "^0", "",
-            time.strftime( "%M:%S", time.gmtime( int( track[ "durationMillis" ] ) / 1000 ) )
+            time.strftime( "%H:%M:%S", time.gmtime( int( track[ "durationMillis" ] ) / 1000 ) )
         )
 
         self.song_store.append([
             "",
             track["id"],
             track["track"],
-            track["title"],
+            track["title"] if not track[ "title" ] == "" else "Unknown",
             this_artist,
-            track["album"],
+            track["album"] if not track[ "album" ] == "" else "Unknown",
             str( track[ "year" ] if not track[ "year" ] == 0 else "" ),
             str( time_string )
         ])
